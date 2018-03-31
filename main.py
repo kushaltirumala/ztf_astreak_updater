@@ -5,9 +5,9 @@ import datetime
 from StringIO import StringIO
 import json
 
-# project_link = 'aschig/ztf-astreaks'
-project_link = 'kushaltirumala/test-2'
-export_type = 'workflow_contents'
+project_link = 'aschig/ztf-astreaks'
+# project_link = 'kushaltirumala/test-2'
+export_type = 'classifications'
 generate_new_set = True
 
 Panoptes.connect(username=username, password=password)
@@ -27,28 +27,25 @@ if (300 + tdelta / 60) >= 24 * 60 and generate_new_set:
     project.generate_export(export_type)
     Panoptes.connect(username=username, password=password)
     project = Project.find(slug=project_link)
+    # this is to wait for export to be finished in the case of large sets
     while True: 
-        try:
-            export_description = project.describe_export(export_type)
-            export_metadata = export_description['media'][0]['metadata']
-            if export_metadata.get('state', '') in ('ready', 'finished'):
-                print 'YES'
-                break
-        except panoptes.PanoptesAPIException:
-            print 'error!'
-            pass
+        export_description = project.describe_export(export_type)
+        export_metadata = export_description['media'][0]['metadata']
+        if export_metadata.get('state', '') in ('ready', 'finished'):
+            print 'YES'
+            break
 
 
-print 'done'
+
 resp = project.get_export(export_type)
 buff = StringIO(resp.content)
 df = pd.read_csv(buff)
 
 # df = pd.read_csv('ztf-astreaks-classifications_20180328.csv')
-# values = [json.loads(row['annotations'])[0]['value'] for index, row in df.iterrows()]
-# df['classification_name'] = values
-# # log distribution of classifications
-# print df['classification_name'].value_counts()
+values = [json.loads(row['annotations'])[0]['value'] for index, row in df.iterrows()]
+df['classification_name'] = values
+# log distribution of classifications
+print df['classification_name'].value_counts()
 
-# # generate index.html of skipped images
-# skips = df[df['classification_name']=="Skip (Includes 'Not Sure' and seemingly 'Blank Images')"]
+# generate index.html of skipped images
+skips = df[df['classification_name']=="Skip (Includes 'Not Sure' and seemingly 'Blank Images')"]
