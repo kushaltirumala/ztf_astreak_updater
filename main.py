@@ -32,7 +32,7 @@ if (300 + tdelta / 60) >= 24 * 60 and generate_new_set:
         export_description = project.describe_export(export_type)
         export_metadata = export_description['media'][0]['metadata']
         if export_metadata.get('state', '') in ('ready', 'finished'):
-            print 'YES'
+            print 'Done exporting data!'
             break
 
 
