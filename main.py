@@ -4,6 +4,8 @@ from creds import username, password
 import datetime
 from StringIO import StringIO
 import json
+import logging
+logging.basicConfig(filename='distribution.log',level=logging.INFO, format='%(asctime)s\n%(message)s', datefmt='%m/%d/%Y %I:%M:%S %p')
 
 def create_html(images):
     with open("index.html", "w") as f:
@@ -11,61 +13,65 @@ def create_html(images):
         for img in images:
             msg += """<div style='float:left; margin:20px; padding: 10px;'><img height=200 width=200 src='""" + img + """'></div>"""
         msg += """</body>"""
-        print msg
         f.write(msg)
 
-project_link = 'aschig/ztf-astreaks'
-# project_link = 'kushaltirumala/test-2'
-export_type = 'classifications'
-generate_new_set = True
-
-Panoptes.connect(username=username, password=password)
-project = Project.find(slug=project_link)
-
-
-try:
-    meta_class = project.describe_export(export_type)
-    last_generated = meta_class['media'][0]['updated_at'][0:19]
-    tdelta = (datetime.datetime.now() - datetime.datetime.strptime(last_generated, '%Y-%m-%dT%H:%M:%S')).total_seconds()
-except panoptes.PanoptesAPIException:
-    # means a classifications set has never been created
-    tdelta = 68401 # just to make it more than 24 hours
-    
-# means it has been 24 hours until 
-if (300 + tdelta / 60) >= 24 * 60 and generate_new_set:
-    project.generate_export(export_type)
+def return_csv(project_link, export_type):
     Panoptes.connect(username=username, password=password)
     project = Project.find(slug=project_link)
-    # this is to wait for export to be finished in the case of large sets
-    while True: 
-        export_description = project.describe_export(export_type)
-        export_metadata = export_description['media'][0]['metadata']
-        if export_metadata.get('state', '') in ('ready', 'finished'):
-            print 'Done exporting data!'
-            break
+
+
+    try:
+        meta_class = project.describe_export(export_type)
+        last_generated = meta_class['media'][0]['updated_at'][0:19]
+        tdelta = (datetime.datetime.now() - datetime.datetime.strptime(last_generated, '%Y-%m-%dT%H:%M:%S')).total_seconds()
+    except panoptes.PanoptesAPIException:
+        # means a classifications set has never been created
+        tdelta = 68401 # just to make it more than 24 hours
+        
+    # means it has been 24 hours until 
+    if (300 + tdelta / 60) >= 24 * 60 and generate_new_set:
+        project.generate_export(export_type)
+        Panoptes.connect(username=username, password=password)
+        project = Project.find(slug=project_link)
+        # this is to wait for export to be finished in the case of large sets
+        while True: 
+            export_description = project.describe_export(export_type)
+            export_metadata = export_description['media'][0]['metadata']
+            if export_metadata.get('state', '') in ('ready', 'finished'):
+                print 'Done exporting data!'
+                break
 
 
 
-resp = project.get_export(export_type)
-buff = StringIO(resp.content)
-df = pd.read_csv(buff)
+    resp = project.get_export(export_type)
+    buff = StringIO(resp.content)
+    df = pd.read_csv(buff)
+    return df
 
-# df = pd.read_csv('ztf-astreaks-classifications_20180328.csv')
-values = [json.loads(row['annotations'])[0]['value'] for index, row in df.iterrows()]
-df['classification_name'] = values
-# log distribution of classifications
-print df['classification_name'].value_counts()
+def main():
+    project_link = 'aschig/ztf-astreaks'
+    generate_new_set = True
 
-# generate index.html of skipped images
-skips = df[df['classification_name']=="Skip (Includes 'Not Sure' and seemingly 'Blank Images')"]
+    df = return_csv(project_link, 'classifications')
+    values = [json.loads(row['annotations'])[0]['value'] for index, row in df.iterrows()]
+    df['classification_name'] = values
 
-# will fill with actual images srcs from subject set
-# image_srcs = [
-#     "https://panoptes-uploads.zooniverse.org/production/subject_location/94362a72-3597-4640-add6-e1b3ce4ec3a6.jpeg",
-#     "https://panoptes-uploads.zooniverse.org/production/subject_location/d6d70aba-bf36-4c82-ace7-30ebf791b3fb.jpeg",
-#     "https://panoptes-uploads.zooniverse.org/production/subject_location/f4c91f1b-037e-44d6-95d5-83fed4e00879.jpeg"
-# ]
-# create_html(image_srcs)
+    # log distribution of classifications
+    print df['classification_name'].value_counts()
+    logging.info(df['classification_name'].value_counts())
+
+    # generate index.html of skipped images
+    skips = df[df['classification_name']=="Skip (Includes 'Not Sure' and seemingly 'Blank Images')"]
+
+    df_subjects = return_csv(project_link, 'subjects')
+
+    image_srcs = [json.loads(df_subjects[df_subjects["subject_id"] == row["subject_ids"]]["locations"].iloc[0])["0"] 
+              for index, row in skips.iterrows()]
+
+    create_html(image_srcs)
+
+if __name__ == "__main__":
+    main()
 
 
 
