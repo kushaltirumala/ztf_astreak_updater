@@ -101,3 +101,5 @@ ENV/
 .mypy_cache/
 
 creds.py
+bogus_set_20180523/
+bogus_set_20180523.tar.gz
